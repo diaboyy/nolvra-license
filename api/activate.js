@@ -1,14 +1,18 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Edge runtime YOK, tamamen kaldırıyoruz.
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ success: false, message: "Only POST allowed" });
   }
 
   try {
-    const { key, deviceId } = req.body;
+    const body = req.body ? req.body : await new Promise(resolve => {
+      let data = "";
+      req.on("data", chunk => data += chunk);
+      req.on("end", () => resolve(JSON.parse(data)));
+    });
+
+    const { key, deviceId } = body;
 
     if (!key || !deviceId) {
       return res.status(400).json({ success: false, message: "Missing parameters" });
@@ -19,7 +23,6 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_KEY
     );
 
-    // Check license
     const { data: license, error } = await supabase
       .from("licenses")
       .select("*")
@@ -30,12 +33,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, message: "Invalid key" });
     }
 
-    // Already used?
     if (license.isUsed && license.deviceId !== deviceId) {
       return res.status(400).json({ success: false, message: "Key already used" });
     }
 
-    // First-time activation
     if (!license.isUsed) {
       await supabase
         .from("licenses")
